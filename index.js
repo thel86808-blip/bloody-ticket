@@ -261,7 +261,7 @@ client.on(Events.InteractionCreate, async interaction => {
       const ticketChannel = interaction.guild.channels.cache.find(ch => ch.topic === `ticketOwner:${interaction.user.id}`);
       if (ticketChannel) await ticketChannel.send({ embeds: [embed] });
 
-      await interaction.reply({ content: "✅ Formulier verzonden naar je ticketkanaal!" flags: 64 });
+      await interaction.reply({ content: "✅ Formulier verzonden naar je ticketkanaal!" epheremal: true });
     }
 
   } catch (err) {
@@ -271,5 +271,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(TOKEN);
+
 
 
