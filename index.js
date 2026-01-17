@@ -18,7 +18,7 @@ const {
 /* ================= KEEP ALIVE ================= */
 const http = require("http");
 http.createServer((_, res) => res.end("OK")).listen(3000, () => {
-  console.log("🌐 Keep-alive server actief");
+  console.log("🌐 Keep-alive server actief op poort 3000");
 });
 
 /* ================= CONFIG ================= */
@@ -42,12 +42,6 @@ const TICKET_CATEGORY_IDS = {
   refund: "1451603709636378644"
 };
 
-/* ================= CLIENT ================= */
-const client = new Client({
-  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
-});
-
-/* ================= TICKETS ================= */
 const ticketCategories = {
   algemene_vragen: { label: "Algemene Vragen", color: 0x5865F2, prefix: "🔵" },
   sollicitatie: { label: "Sollicitatie", color: 0x2ECC71, prefix: "🟢" },
@@ -56,10 +50,15 @@ const ticketCategories = {
   refund: { label: "Refund", color: 0xF1C40F, prefix: "🟡" }
 };
 
+/* ================= CLIENT ================= */
+const client = new Client({
+  intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages]
+});
+
 /* ================= SLASH COMMANDS ================= */
 const commands = [
-  new SlashCommandBuilder().setName("ticket").setDescription("Open ticket menu"),
-  new SlashCommandBuilder().setName("close").setDescription("Sluit ticket")
+  new SlashCommandBuilder().setName("ticket").setDescription("Open het ticket menu"),
+  new SlashCommandBuilder().setName("close").setDescription("Sluit dit ticket (staff only)")
 ].map(c => c.toJSON());
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
@@ -84,11 +83,10 @@ client.once(Events.ClientReady, () => {
 /* ================= INTERACTIONS ================= */
 client.on(Events.InteractionCreate, async interaction => {
   try {
-
     /* ===== /ticket ===== */
     if (interaction.isChatInputCommand() && interaction.commandName === "ticket") {
+      await interaction.deferReply(); // direct defer, geen ephemeral
 
-      // Normale reply, geen ephemeral
       const embed = new EmbedBuilder()
         .setTitle("🎫 Ticket systeem")
         .setDescription("Klik op een knop om een ticket te openen")
@@ -104,48 +102,71 @@ client.on(Events.InteractionCreate, async interaction => {
         );
       }
 
-      await interaction.reply({ embeds: [embed], components: [row] });
+      await interaction.editReply({ embeds: [embed], components: [row] });
       return;
     }
 
     /* ===== /close ===== */
     if (interaction.isChatInputCommand() && interaction.commandName === "close") {
-      if (interaction.channel) await interaction.channel.delete().catch(() => {});
-      await interaction.reply({ content: "✅ Ticket gesloten" }).catch(() => {});
+      if (!interaction.channel) return;
+      await interaction.channel.delete().catch(() => {});
+      if (!interaction.replied) {
+        await interaction.reply({ content: "✅ Ticket gesloten" }).catch(() => {});
+      }
       return;
     }
 
     /* ===== BUTTONS ===== */
-    if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
+    if (interaction.isButton()) {
 
-      const key = interaction.customId.replace("ticket_", "");
-      const cat = ticketCategories[key];
+      // Ticket creation buttons
+      if (interaction.customId.startsWith("ticket_")) {
+        await interaction.deferReply();
 
-      const channel = await interaction.guild.channels.create({
-        name: `${cat.prefix}-${key}-${interaction.user.username}`.toLowerCase().replace(/ /g, "-"),
-        type: ChannelType.GuildText,
-        parent: TICKET_CATEGORY_IDS[key],
-        topic: `ticketOwner:${interaction.user.id}`,
-        permissionOverwrites: [
-          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          { id: STAFF_ROLES[key], allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-        ]
-      });
+        const key = interaction.customId.replace("ticket_", "");
+        const cat = ticketCategories[key];
 
-      await channel.send({
-        embeds: [
-          new EmbedBuilder()
-            .setTitle(`🎫 ${cat.label}`)
-            .setDescription(`Welkom ${interaction.user}`)
-            .setColor(cat.color)
-        ]
-      });
+        const channel = await interaction.guild.channels.create({
+          name: `${cat.prefix}-${key}-${interaction.user.username}`.toLowerCase().replace(/ /g, "-"),
+          type: ChannelType.GuildText,
+          parent: TICKET_CATEGORY_IDS[key],
+          topic: `ticketOwner:${interaction.user.id}`,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+            { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+            { id: STAFF_ROLES[key], allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+          ]
+        });
 
-      // Normale reply naar gebruiker, zichtbaar in de chat
-      await interaction.reply({ content: `✅ Ticket aangemaakt: ${channel}` });
+        // Embed in ticket channel
+        const ticketEmbed = new EmbedBuilder()
+          .setTitle(`🎫 ${cat.label}`)
+          .setDescription(`Welkom ${interaction.user}`)
+          .setColor(cat.color);
+
+        const closeRow = new ActionRowBuilder().addComponents(
+          new ButtonBuilder()
+            .setCustomId("close_ticket")
+            .setLabel("Sluit ticket")
+            .setStyle(ButtonStyle.Danger)
+        );
+
+        await channel.send({ embeds: [ticketEmbed], components: [closeRow] });
+
+        await interaction.editReply({ content: `✅ Ticket aangemaakt: ${channel}` });
+        return;
+      }
+
+      // Close ticket button
+      if (interaction.customId === "close_ticket") {
+        if (!interaction.channel) return;
+        await interaction.channel.delete().catch(() => {});
+        if (!interaction.replied) {
+          await interaction.reply({ content: "✅ Ticket gesloten" }).catch(() => {});
+        }
+        return;
+      }
     }
-
   } catch (err) {
     console.error("💥 Interaction error:", err);
     if (interaction.replied || interaction.deferred) {
