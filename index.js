@@ -84,10 +84,11 @@ client.once(Events.ClientReady, () => {
 /* ================= INTERACTIONS ================= */
 client.on(Events.InteractionCreate, async interaction => {
   try {
+
     /* ===== /ticket ===== */
     if (interaction.isChatInputCommand() && interaction.commandName === "ticket") {
-      await interaction.deferReply({ ephemeral: true });
 
+      // Normale reply, geen ephemeral
       const embed = new EmbedBuilder()
         .setTitle("🎫 Ticket systeem")
         .setDescription("Klik op een knop om een ticket te openen")
@@ -103,21 +104,19 @@ client.on(Events.InteractionCreate, async interaction => {
         );
       }
 
-      await interaction.editReply({ embeds: [embed], components: [row] });
+      await interaction.reply({ embeds: [embed], components: [row] });
       return;
     }
 
     /* ===== /close ===== */
     if (interaction.isChatInputCommand() && interaction.commandName === "close") {
-      await interaction.deferReply({ ephemeral: true });
       if (interaction.channel) await interaction.channel.delete().catch(() => {});
-      await interaction.editReply({ content: "✅ Ticket gesloten" });
+      await interaction.reply({ content: "✅ Ticket gesloten" }).catch(() => {});
       return;
     }
 
     /* ===== BUTTONS ===== */
     if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
-      await interaction.deferReply({ ephemeral: true });
 
       const key = interaction.customId.replace("ticket_", "");
       const cat = ticketCategories[key];
@@ -143,16 +142,16 @@ client.on(Events.InteractionCreate, async interaction => {
         ]
       });
 
-      await interaction.editReply({ content: `✅ Ticket aangemaakt: ${channel}` });
+      // Normale reply naar gebruiker, zichtbaar in de chat
+      await interaction.reply({ content: `✅ Ticket aangemaakt: ${channel}` });
     }
 
   } catch (err) {
     console.error("💥 Interaction error:", err);
-
-    if (interaction.deferred || interaction.replied) {
-      await interaction.followUp({ content: "❌ Er ging iets mis!", ephemeral: true }).catch(() => {});
+    if (interaction.replied || interaction.deferred) {
+      await interaction.followUp({ content: "❌ Er ging iets mis!" }).catch(() => {});
     } else {
-      await interaction.reply({ content: "❌ Er ging iets mis!", ephemeral: true }).catch(() => {});
+      await interaction.reply({ content: "❌ Er ging iets mis!" }).catch(() => {});
     }
   }
 });
