@@ -17,6 +17,21 @@ const {
   ActivityType
 } = require("discord.js");
 
+// server.js
+const http = require('http'); // CommonJS import
+
+const PORT = 3000;
+
+const server = http.createServer((req, res) => {
+  // Stel de response headers in
+  res.writeHead(200, { 'Content-Type': 'text/plain' });
+  res.end('Hello, world!\n');
+});
+
+server.listen(PORT, () => {
+  console.log(`Server luistert op http://localhost:${PORT}`);
+});
+
 /* ================= CONFIG ================= */
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = "1451926942055006289";
@@ -295,3 +310,4 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(TOKEN);
+
