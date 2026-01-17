@@ -1,3 +1,4 @@
+require("dotenv").config();
 const {
   Client,
   GatewayIntentBits,
@@ -21,9 +22,8 @@ const {
 const TOKEN = process.env.TOKEN;
 const CLIENT_ID = "1451926942055006289";
 const GUILD_ID = "1364329816605593781";
-const TICKET_CATEGORY_ID = "1438638532586504267";
 
-// Staff-roles per categorie
+/* Staff-roles per categorie */
 const STAFF_ROLES = {
   "algemene_vragen": "1451252906908057611",
   "sollicitatie": "1426262480761524335",
@@ -32,7 +32,7 @@ const STAFF_ROLES = {
   "refund": "1451252908585783407"
 };
 
-// Category IDs per ticket type
+/* Category IDs per ticket type */
 const TICKET_CATEGORY_IDS = {
   "algemene_vragen": "1379125690166677656",
   "sollicitatie": "1379125835298242620",
@@ -89,184 +89,157 @@ const commands = [
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 (async () => {
-  await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
-  console.log("✅ Commands geregistreerd");
+  try {
+    await rest.put(Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID), { body: commands });
+    console.log("✅ Commands geregistreerd");
+  } catch (err) {
+    console.error("💥 Fout bij commands registeren:", err);
+  }
 })();
 
 /* ================= READY ================= */
-client.once("clientReady", () => {
+client.once(Events.ClientReady, () => {
   console.log(`🤖 Online als ${client.user.tag}`);
   client.user.setActivity({ name: "Murat's Shop", type: ActivityType.Watching });
 });
 
 /* ================= INTERACTIONS ================= */
 client.on(Events.InteractionCreate, async interaction => {
+  try {
 
-  /* ===== SLASH COMMANDS ===== */
-  if (interaction.isChatInputCommand()) {
+    /* ===== SLASH COMMANDS ===== */
+    if (interaction.isChatInputCommand()) {
 
-    if (interaction.commandName === "ticket") {
-      await interaction.deferReply({ flags: 64 }); // ephemeral
-      await interaction.deleteReply();
+      if (interaction.commandName === "ticket") {
+        // Direct embed + buttons in channel, **geen ephemeral**
+        const embed = new EmbedBuilder()
+          .setTitle("📌 Bloody Angels - Tickets")
+          .setDescription("Hier kan je tickets openen als je vragen hebt of een sollicitatie wilt doen.\nOpen hier gemakkelijk tickets als je een vraag in de hoofdchat niet kan beantwoorden!")
+          .setColor(0x5865F2);
 
-      const embed = new EmbedBuilder()
-        .setTitle("📌 Bloody Angels - Tickets")
-        .setDescription(
-          "Hier kan je tickets openen als je vragen hebt of een sollicitatie wilt doen.\n" +
-          "Open hier gemakkelijk tickets als je een vraag in de hoofdchat niet kan beantwoorden!"
-        )
-        .setColor(0x5865F2);
+        const row = new ActionRowBuilder();
+        for (const key in ticketCategories) {
+          row.addComponents(
+            new ButtonBuilder()
+              .setCustomId(key)
+              .setLabel(ticketCategories[key].label)
+              .setStyle(ButtonStyle.Primary)
+          );
+        }
 
-      const row = new ActionRowBuilder();
-      for (const key in ticketCategories) {
-        row.addComponents(
-          new ButtonBuilder()
-            .setCustomId(key)
-            .setLabel(ticketCategories[key].label)
-            .setStyle(ButtonStyle.Primary)
+        await interaction.channel.send({ embeds: [embed], components: [row] });
+        return;
+      }
+
+      // STAFF COMMANDS
+      const staffOnly = ["close", "add", "remove", "rename", "move"];
+      if (staffOnly.includes(interaction.commandName)) {
+        if (!interaction.member.roles.cache.hasAny(...Object.values(STAFF_ROLES))) {
+          await interaction.reply({ content: "❌ Alleen staff kan dit commando gebruiken." });
+          return;
+        }
+        if (!interaction.channel.topic?.startsWith("ticketOwner:")) {
+          await interaction.reply({ content: "❌ Dit is geen ticket." });
+          return;
+        }
+
+        if (interaction.commandName === "close") {
+          await interaction.reply({ content: "⛔ Ticket wordt gesloten..." });
+          await sendTranscript(interaction.channel);
+          interaction.channel?.delete().catch(() => {});
+          return;
+        }
+
+        if (interaction.commandName === "add") {
+          const user = interaction.options.getUser("user");
+          await interaction.channel.permissionOverwrites.edit(user.id, { ViewChannel: true, SendMessages: true });
+          await interaction.reply({ content: `✅ ${user} toegevoegd.` });
+          return;
+        }
+
+        if (interaction.commandName === "remove") {
+          const user = interaction.options.getUser("user");
+          await interaction.channel.permissionOverwrites.delete(user.id);
+          await interaction.reply({ content: `🗑️ ${user} verwijderd.` });
+          return;
+        }
+
+        if (interaction.commandName === "rename") {
+          const naam = interaction.options.getString("naam");
+          await interaction.channel.setName(naam);
+          await interaction.reply({ content: `✏️ Ticket hernoemd naar **${naam}**` });
+          return;
+        }
+
+        if (interaction.commandName === "move") {
+          const catId = interaction.options.getString("categorie");
+          await interaction.channel.setParent(catId);
+          await interaction.reply({ content: "📂 Ticket verplaatst." });
+          return;
+        }
+      }
+    }
+
+    /* ===== BUTTONS ===== */
+    if (interaction.isButton()) {
+
+      // TICKET CREATION
+      if (ticketCategories[interaction.customId]) {
+        const cat = ticketCategories[interaction.customId];
+
+        const usernameFormatted = interaction.user.username.toLowerCase().replace(/ /g, "-");
+
+        const ticketChannel = await interaction.guild.channels.create({
+          name: `${cat.prefix}-${interaction.customId}-${usernameFormatted}`,
+          type: ChannelType.GuildText,
+          parent: cat.categoryId,
+          topic: `ticketOwner:${interaction.user.id}`,
+          permissionOverwrites: [
+            { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+            { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+            { id: cat.staffRole, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+          ]
+        });
+
+        const embed = new EmbedBuilder()
+          .setTitle(`🎫 Ticket: ${cat.label}`)
+          .setDescription(`📌 **Welkom bij je ticket!**\nWacht hier geduldig af op een reactie.\nTaggen of spam wordt automatisch afgekeurd.\n\n**Categorie:** ${cat.label}\n**Staff Tag:** <@&${cat.staffRole}>\n**Door:** ${interaction.user}\n**Aangemaakt op:** <t:${Math.floor(Date.now() / 1000)}:f>`)
+          .setColor(cat.color);
+
+        const row = new ActionRowBuilder().addComponents(
+          new ButtonBuilder().setCustomId("close_ticket").setLabel("Close").setStyle(ButtonStyle.Danger)
         );
-      }
 
-      await interaction.channel.send({ embeds: [embed], components: [row] });
-      return;
-    }
+        await ticketChannel.send({ embeds: [embed], components: [row] });
 
-    // STAFF COMMANDS
-    const staffOnly = ["close", "add", "remove", "rename", "move"];
-    if (staffOnly.includes(interaction.commandName)) {
-      if (!interaction.member.roles.cache.hasAny(...Object.values(STAFF_ROLES))) {
-        await interaction.reply({ content: "❌ Alleen staff kan dit commando gebruiken.", flags: 64 });
+        // MODAL
+        const modal = new ModalBuilder().setCustomId(`ticket_modal_${interaction.user.id}`).setTitle("Ticket Formulier");
+
+        const naamInput = new TextInputBuilder().setCustomId("naam").setLabel("Wat is jouw naam").setStyle(TextInputStyle.Short).setRequired(true);
+        const leeftijdInput = new TextInputBuilder().setCustomId("leeftijd").setLabel("Wat is jouw leeftijd").setStyle(TextInputStyle.Paragraph).setRequired(true);
+        const extraInput = new TextInputBuilder().setCustomId("extra").setLabel("Extra informatie").setStyle(TextInputStyle.Paragraph).setRequired(false);
+
+        modal.addComponents(
+          new ActionRowBuilder().addComponents(naamInput),
+          new ActionRowBuilder().addComponents(leeftijdInput),
+          new ActionRowBuilder().addComponents(extraInput)
+        );
+
+        await interaction.showModal(modal);
         return;
       }
-      if (!interaction.channel.topic?.startsWith("ticketOwner:")) {
-        await interaction.reply({ content: "❌ Dit is geen ticket.", flags: 64 });
-        return;
-      }
 
-      if (interaction.commandName === "close") {
-        await interaction.reply({ content: "⛔ Ticket wordt gesloten...", flags: 64 });
+      // CLOSE BUTTON
+      if (interaction.customId === "close_ticket") {
+        await interaction.reply({ content: "⛔ Ticket wordt gesloten..." });
         await sendTranscript(interaction.channel);
-        interaction.channel?.delete().catch(() => {}); // ✅ safe delete
-        return;
-      }
-
-      if (interaction.commandName === "add") {
-        const user = interaction.options.getUser("user");
-        await interaction.channel.permissionOverwrites.edit(user.id, { ViewChannel: true, SendMessages: true });
-        await interaction.reply({ content: `✅ ${user} toegevoegd.`, flags: 64 });
-        return;
-      }
-
-      if (interaction.commandName === "remove") {
-        const user = interaction.options.getUser("user");
-        await interaction.channel.permissionOverwrites.delete(user.id);
-        await interaction.reply({ content: `🗑️ ${user} verwijderd.`, flags: 64 });
-        return;
-      }
-
-      if (interaction.commandName === "rename") {
-        const naam = interaction.options.getString("naam");
-        await interaction.channel.setName(naam);
-        await interaction.reply({ content: `✏️ Ticket hernoemd naar **${naam}**`, flags: 64 });
-        return;
-      }
-
-      if (interaction.commandName === "move") {
-        const catId = interaction.options.getString("categorie");
-        await interaction.channel.setParent(catId);
-        await interaction.reply({ content: "📂 Ticket verplaatst.", flags: 64 });
+        interaction.channel?.delete().catch(() => {});
         return;
       }
     }
-  }
 
-  /* ===== BUTTONS ===== */
-  if (interaction.isButton()) {
-
-    // TICKET CREATION
-    if (ticketCategories[interaction.customId]) {
-      const cat = ticketCategories[interaction.customId];
-
-      // format username voor kanaalnaam
-      const usernameFormatted = interaction.user.username.toLowerCase().replace(/ /g, "-");
-
-      const ticketChannel = await interaction.guild.channels.create({
-        name: `${cat.prefix}-${interaction.customId}-${usernameFormatted}`,
-        type: ChannelType.GuildText,
-        parent: cat.categoryId,
-        topic: `ticketOwner:${interaction.user.id}`,
-        permissionOverwrites: [
-          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-          { id: cat.staffRole, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-        ]
-      });
-
-      // WELKOM EMBED
-      const embed = new EmbedBuilder()
-        .setTitle(`🎫 Ticket: ${cat.label}`)
-        .setDescription(
-          `📌 **Welkom bij je ticket!**\n` +
-          `Wacht hier geduldig af op een reactie.\n` +
-          `Taggen of spam wordt automatisch afgekeurd.\n\n` +
-          `**Categorie:** ${cat.label}\n` +
-          `**Staff Tag:** <@&${cat.staffRole}>\n` +
-          `**Door:** ${interaction.user}\n` +
-          `**Aangemaakt op:** <t:${Math.floor(Date.now() / 1000)}:f>`
-        )
-        .setColor(cat.color);
-
-      const row = new ActionRowBuilder().addComponents(
-        new ButtonBuilder().setCustomId("close_ticket").setLabel("Close").setStyle(ButtonStyle.Danger)
-      );
-
-      await ticketChannel.send({ embeds: [embed], components: [row] });
-
-      // MODAL MET EXTRA VELD
-      const modal = new ModalBuilder()
-        .setCustomId(`ticket_modal_${interaction.user.id}`)
-        .setTitle("Ticket Formulier");
-
-      const naamInput = new TextInputBuilder()
-        .setCustomId("naam")
-        .setLabel("Wat is jouw naam")
-        .setStyle(TextInputStyle.Short)
-        .setRequired(true);
-
-      const leeftijdInput = new TextInputBuilder()
-        .setCustomId("leeftijd")
-        .setLabel("Wat is jouw leeftijd")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(true);
-
-      const extraInput = new TextInputBuilder()
-        .setCustomId("extra")
-        .setLabel("Extra informatie")
-        .setStyle(TextInputStyle.Paragraph)
-        .setRequired(false); // optioneel
-
-      modal.addComponents(
-        new ActionRowBuilder().addComponents(naamInput),
-        new ActionRowBuilder().addComponents(leeftijdInput),
-        new ActionRowBuilder().addComponents(extraInput)
-      );
-
-      await interaction.showModal(modal);
-      return;
-    }
-
-    // CLOSE BUTTON
-    if (interaction.customId === "close_ticket") {
-      await interaction.reply({ content: "⛔ Ticket wordt gesloten...", flags: 64 });
-      await sendTranscript(interaction.channel);
-      interaction.channel?.delete().catch(() => {});
-      return;
-    }
-  }
-
-  /* ===== MODAL SUBMISSION ===== */
-  if (interaction.isModalSubmit()) {
-    if (interaction.customId.startsWith("ticket_modal_")) {
+    /* ===== MODAL SUBMISSION ===== */
+    if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
       const naam = interaction.fields.getTextInputValue("naam");
       const leeftijd = interaction.fields.getTextInputValue("leeftijd");
       const extra = interaction.fields.getTextInputValue("extra") || "Geen extra info";
@@ -280,16 +253,14 @@ client.on(Events.InteractionCreate, async interaction => {
         )
         .setColor(0x00FF00);
 
-      const ticketChannel = interaction.guild.channels.cache.find(
-        ch => ch.topic === `ticketOwner:${interaction.user.id}`
-      );
+      const ticketChannel = interaction.guild.channels.cache.find(ch => ch.topic === `ticketOwner:${interaction.user.id}`);
+      if (ticketChannel) await ticketChannel.send({ embeds: [embed] });
 
-      if (ticketChannel) {
-        await ticketChannel.send({ embeds: [embed] });
-      }
-
-      await interaction.reply({ content: "✅ Formulier verzonden naar je ticketkanaal!", flags: 64 });
+      await interaction.reply({ content: "✅ Formulier verzonden naar je ticketkanaal!" });
     }
+
+  } catch (err) {
+    console.error("💥 Interactie error:", err);
   }
 });
 
