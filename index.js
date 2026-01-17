@@ -23,6 +23,11 @@ const {
 const TOKEN = process.env.DISCORD_TOKEN;
 if (!TOKEN) throw new Error("❌ DISCORD_TOKEN ontbreekt");
 
+console.log(
+  "TOKEN START:",
+  process.env.DISCORD_TOKEN?.slice(0, 15)
+);
+
 const CLIENT_ID = "1451926942055006289";
 const GUILD_ID = "1364329816605593781";
 
@@ -231,5 +236,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(TOKEN);
+
 
 
