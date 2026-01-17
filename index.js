@@ -6,9 +6,6 @@ const {
   ButtonBuilder,
   ButtonStyle,
   EmbedBuilder,
-  ModalBuilder,
-  TextInputBuilder,
-  TextInputStyle,
   SlashCommandBuilder,
   REST,
   Routes,
@@ -67,84 +64,96 @@ const commands = [
 
 const rest = new REST({ version: "10" }).setToken(TOKEN);
 (async () => {
-  await rest.put(
-    Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-    { body: commands }
-  );
-  console.log("✅ Slash commands geregistreerd");
+  try {
+    await rest.put(
+      Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
+      { body: commands }
+    );
+    console.log("✅ Slash commands geregistreerd");
+  } catch (err) {
+    console.error("💥 Fout bij registeren commands:", err);
+  }
 })();
 
 /* ================= READY ================= */
 client.once(Events.ClientReady, () => {
   console.log(`🤖 Online als ${client.user.tag}`);
-  client.user.setActivity({
-    name: "Murat's Shop",
-    type: ActivityType.Watching
-  });
+  client.user.setActivity({ name: "Murat's Shop", type: ActivityType.Watching });
 });
 
 /* ================= INTERACTIONS ================= */
 client.on(Events.InteractionCreate, async interaction => {
+  try {
+    /* ===== /ticket ===== */
+    if (interaction.isChatInputCommand() && interaction.commandName === "ticket") {
+      await interaction.deferReply({ ephemeral: true });
 
-  /* ===== /ticket ===== */
-  if (interaction.isChatInputCommand() && interaction.commandName === "ticket") {
-    await interaction.deferReply({ flags: 64 });
+      const embed = new EmbedBuilder()
+        .setTitle("🎫 Ticket systeem")
+        .setDescription("Klik op een knop om een ticket te openen")
+        .setColor(0x5865F2);
 
-    const embed = new EmbedBuilder()
-      .setTitle("🎫 Ticket systeem")
-      .setDescription("Klik op een knop om een ticket te openen")
-      .setColor(0x5865F2);
+      const row = new ActionRowBuilder();
+      for (const key in ticketCategories) {
+        row.addComponents(
+          new ButtonBuilder()
+            .setCustomId(`ticket_${key}`)
+            .setLabel(ticketCategories[key].label)
+            .setStyle(ButtonStyle.Primary)
+        );
+      }
 
-    const row = new ActionRowBuilder();
-    for (const key in ticketCategories) {
-      row.addComponents(
-        new ButtonBuilder()
-          .setCustomId(`ticket_${key}`)
-          .setLabel(ticketCategories[key].label)
-          .setStyle(ButtonStyle.Primary)
-      );
+      await interaction.editReply({ embeds: [embed], components: [row] });
+      return;
     }
 
-    await interaction.editReply({ embeds: [embed], components: [row] });
-    return;
-  }
+    /* ===== /close ===== */
+    if (interaction.isChatInputCommand() && interaction.commandName === "close") {
+      await interaction.deferReply({ ephemeral: true });
+      if (interaction.channel) await interaction.channel.delete().catch(() => {});
+      await interaction.editReply({ content: "✅ Ticket gesloten" });
+      return;
+    }
 
-  /* ===== /close ===== */
-  if (interaction.isChatInputCommand() && interaction.commandName === "close") {
-    await interaction.deferReply({ flags: 64 });
-    await interaction.channel.delete().catch(() => {});
-    return;
-  }
+    /* ===== BUTTONS ===== */
+    if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
+      await interaction.deferReply({ ephemeral: true });
 
-  /* ===== BUTTONS ===== */
-  if (interaction.isButton() && interaction.customId.startsWith("ticket_")) {
-    await interaction.deferReply({ flags: 64 });
+      const key = interaction.customId.replace("ticket_", "");
+      const cat = ticketCategories[key];
 
-    const key = interaction.customId.replace("ticket_", "");
-    const cat = ticketCategories[key];
+      const channel = await interaction.guild.channels.create({
+        name: `${cat.prefix}-${key}-${interaction.user.username}`.toLowerCase().replace(/ /g, "-"),
+        type: ChannelType.GuildText,
+        parent: TICKET_CATEGORY_IDS[key],
+        topic: `ticketOwner:${interaction.user.id}`,
+        permissionOverwrites: [
+          { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
+          { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
+          { id: STAFF_ROLES[key], allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
+        ]
+      });
 
-    const channel = await interaction.guild.channels.create({
-      name: `${cat.prefix}-${key}-${interaction.user.username}`,
-      type: ChannelType.GuildText,
-      parent: TICKET_CATEGORY_IDS[key],
-      topic: `ticketOwner:${interaction.user.id}`,
-      permissionOverwrites: [
-        { id: interaction.guild.id, deny: [PermissionsBitField.Flags.ViewChannel] },
-        { id: interaction.user.id, allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] },
-        { id: STAFF_ROLES[key], allow: [PermissionsBitField.Flags.ViewChannel, PermissionsBitField.Flags.SendMessages] }
-      ]
-    });
+      await channel.send({
+        embeds: [
+          new EmbedBuilder()
+            .setTitle(`🎫 ${cat.label}`)
+            .setDescription(`Welkom ${interaction.user}`)
+            .setColor(cat.color)
+        ]
+      });
 
-    await channel.send({
-      embeds: [
-        new EmbedBuilder()
-          .setTitle(`🎫 ${cat.label}`)
-          .setDescription(`Welkom ${interaction.user}`)
-          .setColor(cat.color)
-      ]
-    });
+      await interaction.editReply({ content: `✅ Ticket aangemaakt: ${channel}` });
+    }
 
-    await interaction.editReply({ content: "✅ Ticket aangemaakt!" });
+  } catch (err) {
+    console.error("💥 Interaction error:", err);
+
+    if (interaction.deferred || interaction.replied) {
+      await interaction.followUp({ content: "❌ Er ging iets mis!", ephemeral: true }).catch(() => {});
+    } else {
+      await interaction.reply({ content: "❌ Er ging iets mis!", ephemeral: true }).catch(() => {});
+    }
   }
 });
 
