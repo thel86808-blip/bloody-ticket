@@ -309,5 +309,6 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 /* ================= LOGIN ================= */
-client.login(TOKEN);
+client.login(process.env.TOKEN);
+
 
