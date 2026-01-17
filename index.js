@@ -244,27 +244,37 @@ client.on(Events.InteractionCreate, async interaction => {
     }
 
     /* ===== MODAL SUBMISSION ===== */
-    if (interaction.isModalSubmit() && interaction.customId.startsWith("ticket_modal_")) {
-      const naam = interaction.fields.getTextInputValue("naam");
-      const leeftijd = interaction.fields.getTextInputValue("leeftijd");
-      const extra = interaction.fields.getTextInputValue("extra") || "Geen extra info";
+    if (interaction.isModalSubmit()) {
+  if (interaction.customId.startsWith("ticket_modal_")) {
+    const naam = interaction.fields.getTextInputValue("naam");
+    const leeftijd = interaction.fields.getTextInputValue("leeftijd");
+    const extra = interaction.fields.getTextInputValue("extra") || "Geen extra info";
 
-      const embed = new EmbedBuilder()
-        .setTitle("💬 Antwoorden Ticket Formulier")
-        .addFields(
-          { name: "Wat is jouw naam", value: naam, inline: false },
-          { name: "Wat is jouw leeftijd", value: leeftijd, inline: false },
-          { name: "Extra informatie", value: extra, inline: false }
-        )
-        .setColor(0x00FF00);
+    const embed = new EmbedBuilder()
+      .setTitle("💬 Antwoorden Ticket Formulier")
+      .addFields(
+        { name: "Wat is jouw naam", value: naam, inline: false },
+        { name: "Wat is jouw leeftijd", value: leeftijd, inline: false },
+        { name: "Extra informatie", value: extra, inline: false }
+      )
+      .setColor(0x00FF00);
 
-      const ticketChannel = interaction.guild.channels.cache.find(ch => ch.topic === `ticketOwner:${interaction.user.id}`);
-      if (ticketChannel) await ticketChannel.send({ embeds: [embed] });
+    const ticketChannel = interaction.guild.channels.cache.find(
+      ch => ch.topic === `ticketOwner:${interaction.user.id}`
+    );
 
-      await interaction.reply({ content: "✅ Formulier verzonden naar je ticketkanaal!", 
-      epheremal: true 
-      });
+    if (ticketChannel) {
+      await ticketChannel.send({ embeds: [embed] });
     }
+
+    // ✅ Stuur de bevestiging alleen naar de gebruiker
+    await interaction.reply({ 
+      content: "✅ Formulier verzonden naar je ticketkanaal!", 
+      ephemeral: true 
+    });
+  }
+}
+
 
   } catch (err) {
     console.error("💥 Interactie error:", err);
@@ -273,6 +283,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(TOKEN);
+
 
 
 
