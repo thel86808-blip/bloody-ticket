@@ -41,6 +41,11 @@ const TICKET_CATEGORY_IDS = {
   "refund": "1451603709636378644"
 };
 
+const http = require("http");
+http.createServer((_, res) => res.end("OK")).listen(3000, () => {
+  console.log("🌐 Keep-alive server actief");
+});
+
 /* ================= CLIENT ================= */
 const client = new Client({ intents: [GatewayIntentBits.Guilds, GatewayIntentBits.GuildMessages] });
 
@@ -266,4 +271,5 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(TOKEN);
+
 
