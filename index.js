@@ -18,6 +18,10 @@ const {
 } = require("discord.js");
 
 require('dotenv').config();
+const { REST, Routes } = require('discord.js');
+
+const rest = new REST({ version: '10' }).setToken(process.env.TOKEN);
+
 
 // server.js
 const http = require('http'); // CommonJS import
@@ -312,6 +316,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
 
