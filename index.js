@@ -230,4 +230,5 @@ client.on(Events.InteractionCreate, async interaction => {
 });
 
 /* ================= LOGIN ================= */
-client.login(TOKEN);
+client.login(DISCORD_TOKEN);
+
