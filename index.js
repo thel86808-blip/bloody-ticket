@@ -17,6 +17,8 @@ const {
   ActivityType
 } = require("discord.js");
 
+require('dotenv').config();
+
 // server.js
 const http = require('http'); // CommonJS import
 
@@ -310,5 +312,6 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
