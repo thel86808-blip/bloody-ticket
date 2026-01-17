@@ -18,6 +18,7 @@ const {
 } = require("discord.js");
 
 require('dotenv').config();
+const TOKEN = process.env.TOKEN;
 
 
 // server.js
@@ -36,7 +37,6 @@ server.listen(PORT, () => {
 });
 
 /* ================= CONFIG ================= */
-const TOKEN = process.env.TOKEN;
 const CLIENT_ID = "1451926942055006289";
 const GUILD_ID = "1364329816605593781";
 const TICKET_CATEGORY_ID = "1438638532586504267";
@@ -313,6 +313,7 @@ client.on(Events.InteractionCreate, async interaction => {
 
 /* ================= LOGIN ================= */
 client.login(process.env.TOKEN);
+
 
 
 
